@@ -1,0 +1,12 @@
+model = "google/gemini-3.7-flash"
+model_provider = "gemini_canonical_bridge"
+model_catalog_json = "/ABSOLUTE/PATH/TO/openrouter-vercel-proxy/model_catalog.gemini.json"
+
+[model_providers.gemini_canonical_bridge]
+name = "Gemini Canonical Bridge"
+base_url = "https://your-domain.example/api/gemini/v1"
+env_key = "GEMINI_PROXY_API_KEY"
+wire_api = "responses"
+requires_openai_auth = false
+supports_websockets = false
+supports_standalone_web_search = false

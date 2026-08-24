@@ -2,12 +2,18 @@
   "name": "openrouter-vercel-proxy",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
+    "@ai-sdk/gateway": "^4.0.62",
+    "ai": "^7.0.77",
     "next": "^16.2.3",
     "react": "19.2.0",
     "react-dom": "19.2.0",
@@ -17,6 +23,7 @@
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "tsx": "^4.23.12",
     "typescript": "^5.8.0"
   }
 }

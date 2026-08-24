@@ -5,6 +5,7 @@
 - 前端或 Codex 调用 `/api/v1/chat/completions` / `/api/v1/responses`
 - 服务端转发到 OpenRouter
 - 支持服务端 OpenRouter Key，也兼容客户端自带 OpenRouter Key（BYOK）
+- 通过独立的 `/api/gemini/v1` Base URL 将 Codex Responses API 适配到 Gemini
 - 可继续扩展鉴权、限流、日志
 
 ## 本地启动
@@ -48,6 +49,75 @@ https://your-domain.example/api/v1
 
 provider 必须使用 Responses API，并将其 API key 设置为 `PROXY_API_KEY`。实际请求路径为
 `POST /api/v1/responses`。部署后请确认 Vercel 中的两个密钥变量均已配置并重新部署。
+
+## Gemini Canonical Bridge
+
+Gemini 使用完全独立的 Base URL，不会经过或修改已有的 OpenRouter、Vercel Gateway 路由：
+
+```text
+https://your-domain.example/api/gemini/v1
+```
+
+Codex 实际请求 `POST /api/gemini/v1/responses`。健康检查位于
+`GET /api/gemini/health`。
+
+这不是简单透传。新端点会完成 `codex-gemini-canonical-bridge` 的核心转换：
+
+- 把 Codex Responses 输入转换成 AI SDK 的 canonical `ModelMessage[]`
+- 将 function、namespace、custom tool 转为 Gemini 可接受的函数 schema
+- 将结构化的 `apply_patch` 调用确定性渲染回 Codex patch 文本
+- 把 Gemini 流转换为 Codex 可消费的 Responses SSE 事件
+- 原样保存 AI SDK 返回的 Gemini `thoughtSignature` provider metadata
+- 工具轮次采用两阶段提交；签名 assistant 消息和全部工具结果始终成对进入历史
+- Codex 压缩或重写历史时自动开启新的 canonical segment
+
+服务端至少配置：
+
+```text
+GEMINI_AI_GATEWAY_API_KEY=your_ai_gateway_key
+GEMINI_PROXY_API_KEY=your_client_facing_proxy_key
+```
+
+`GEMINI_AI_GATEWAY_API_KEY` 也可由 `AI_GATEWAY_API_KEY` 或 `VERCEL_API_KEY`
+提供。`GEMINI_PROXY_API_KEY` 未设置时会复用原有的 `PROXY_API_KEY`，因此现有部署
+可以继续用同一个客户端代理密钥，但 Base URL 仍然完全隔离。若服务端没有配置上游
+key 且也没有代理 key，则仍支持把客户端 Bearer token 作为 AI Gateway BYOK key。
+
+本地单进程会把 canonical 会话保存在 `.gemini-canonical-state`。Vercel 多实例部署必须
+配置 Redis REST，才能在冷启动和实例切换后继续保留 Gemini 签名历史：
+
+```text
+GEMINI_REDIS_REST_URL=https://...
+GEMINI_REDIS_REST_TOKEN=...
+```
+
+也会自动识别 `KV_REST_API_URL` / `KV_REST_API_TOKEN` 和
+`UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`。Redis 模式同时使用按会话的
+分布式锁，避免同一 Codex 任务的并发请求交错写坏历史。不配置 Redis 时，Vercel 会回退
+到 `/tmp` 临时状态，仅适合短期验证，不保证跨实例连续性。
+
+`apply_patch` 的本地文件预检只在桥接器和 Codex 位于同一台可信机器时有意义。Vercel
+默认禁用该文件读取；如在同机自托管且希望保留原适配器的上下文刷新，可显式设置
+`GEMINI_ENABLE_LOCAL_PATCH_PREFLIGHT=true`。
+
+Codex 配置示例（同时可使用项目根目录的 `model_catalog.gemini.json`）：
+
+```toml
+model = "google/gemini-3.7-flash"
+model_provider = "gemini_canonical_bridge"
+model_catalog_json = "/ABSOLUTE/PATH/TO/model_catalog.gemini.json"
+
+[model_providers.gemini_canonical_bridge]
+name = "Gemini Canonical Bridge"
+base_url = "https://your-domain.example/api/gemini/v1"
+env_key = "GEMINI_PROXY_API_KEY"
+wire_api = "responses"
+requires_openai_auth = false
+supports_websockets = false
+supports_standalone_web_search = false
+```
+
+Gemini 适配依赖 AI SDK 7，需要 Node.js 22 或更高版本。Vercel 部署时请使用 Node.js 22。
 
 ## 调用示例
 
