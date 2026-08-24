@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { callOpenRouter, extractApiKey } from "@/lib/openrouter";
+import { authorizeOpenRouterRequest, callOpenRouter } from "@/lib/openrouter";
 import { corsHeaders, isDeniedOrigin } from "@/lib/security";
 import { env } from "@/lib/env";
 
@@ -26,6 +26,8 @@ function isValidResponsesTool(tool: Record<string, unknown>) {
 
 function normalizeResponsesBody(input: Record<string, unknown>) {
   const body = { ...input };
+
+  delete body.client_metadata;
 
   if (Array.isArray(body.tools)) {
     body.tools = body.tools
@@ -59,7 +61,10 @@ function normalizeResponsesBody(input: Record<string, unknown>) {
         if (!tool) return false;
         const ok = isValidResponsesTool(tool);
         if (!ok) {
-          console.warn("Dropping invalid responses tool:", tool);
+          console.warn("Dropping unsupported Responses tool", {
+            type: tool.type,
+            name: tool.name,
+          });
         }
         return ok;
       });
@@ -87,32 +92,37 @@ export async function POST(req: Request) {
       );
     }
 
-    const apiKey = extractApiKey(req);
-    if (!apiKey) {
+    const authorization = authorizeOpenRouterRequest(req);
+    if (!authorization.ok) {
       return Response.json(
         {
           ok: false,
-          error:
-            "Missing API key. Pass it in x-openrouter-api-key or Authorization: Bearer <key>.",
+          error: authorization.error,
         },
-        { status: 401, headers: corsHeaders(origin) },
+        { status: authorization.status, headers: corsHeaders(origin) },
       );
     }
 
     const json = await req.json();
     const parsed = bodySchema.parse(json);
-    console.log("request", parsed);
     const upstreamBody = normalizeResponsesBody({
       ...parsed,
       model: parsed.model || env.DEFAULT_MODEL,
     });
 
-    console.log(
-      "normalized responses tools:",
-      JSON.stringify((upstreamBody as any).tools ?? null, null, 2),
-    );
+    console.info("OpenRouter Responses request", {
+      model: upstreamBody.model,
+      stream: upstreamBody.stream === true,
+      toolCount: Array.isArray(upstreamBody.tools)
+        ? upstreamBody.tools.length
+        : 0,
+    });
 
-    const upstream = await callOpenRouter(req, "responses", upstreamBody);
+    const upstream = await callOpenRouter(
+      "responses",
+      upstreamBody,
+      authorization.apiKey,
+    );
 
     return new Response(upstream.body, {
       status: upstream.status,
@@ -121,6 +131,10 @@ export async function POST(req: Request) {
         "Content-Type":
           upstream.headers.get("content-type") || "application/json",
         "Cache-Control": "no-store",
+        "X-Accel-Buffering": "no",
+        ...(upstream.headers.get("x-request-id")
+          ? { "X-Request-Id": upstream.headers.get("x-request-id")! }
+          : {}),
       },
     });
   } catch (error) {

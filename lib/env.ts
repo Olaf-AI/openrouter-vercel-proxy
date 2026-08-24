@@ -6,6 +6,10 @@ function splitCsv(value?: string): string[] {
 }
 
 export const env = {
+  OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY?.trim() || "",
+
+  PROXY_API_KEY: process.env.PROXY_API_KEY?.trim() || "",
+
   OPENROUTER_BASE_URL:
     process.env.OPENROUTER_BASE_URL?.trim() || "https://openrouter.ai/api/v1",
 

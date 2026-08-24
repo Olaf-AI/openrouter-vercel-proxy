@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { callOpenRouter, extractApiKey } from "@/lib/openrouter";
+import { authorizeOpenRouterRequest, callOpenRouter } from "@/lib/openrouter";
 import { corsHeaders, isDeniedOrigin } from "@/lib/security";
 import { env } from "@/lib/env";
 
@@ -41,16 +41,15 @@ export async function POST(req: Request) {
       );
     }
 
-    const apiKey = extractApiKey(req);
-    if (!apiKey) {
+    const authorization = authorizeOpenRouterRequest(req);
+    if (!authorization.ok) {
       return Response.json(
         {
           ok: false,
-          error:
-            "Missing API key. Pass it in x-openrouter-api-key or Authorization: Bearer <key>.",
+          error: authorization.error,
         },
         {
-          status: 401,
+          status: authorization.status,
           headers: corsHeaders(origin),
         },
       );
@@ -59,13 +58,17 @@ export async function POST(req: Request) {
     const json = await req.json();
     const body = bodySchema.parse(json);
 
-    const upstream = await callOpenRouter(req, "chat/completions", {
-      model: body.model || env.DEFAULT_MODEL,
-      messages: body.messages,
-      temperature: body.temperature,
-      max_tokens: body.max_tokens,
-      stream: body.stream ?? false,
-    });
+    const upstream = await callOpenRouter(
+      "chat/completions",
+      {
+        model: body.model || env.DEFAULT_MODEL,
+        messages: body.messages,
+        temperature: body.temperature,
+        max_tokens: body.max_tokens,
+        stream: body.stream ?? false,
+      },
+      authorization.apiKey,
+    );
 
     return new Response(upstream.body, {
       status: upstream.status,
