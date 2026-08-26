@@ -119,6 +119,20 @@ supports_standalone_web_search = false
 
 Gemini 适配依赖 AI SDK 7，需要 Node.js 22 或更高版本。Vercel 部署时请使用 Node.js 22。
 
+Vercel AI Gateway 的逐请求密钥转发使用另一个入口：
+
+```text
+https://your-domain.example/api/vercel-gateway/v1
+```
+
+代理日志只记录 Vercel key 的 SHA-256 前 12 位指纹，不会记录原始 key。可在客户端计算
+同样的指纹并与 Vercel Logs 中的 `keyFingerprint` 对比：
+
+```bash
+printf %s "$AI_GATEWAY_API_KEY" | sha256sum | cut -c1-12 # Linux
+printf %s "$AI_GATEWAY_API_KEY" | shasum -a 256 | cut -c1-12 # macOS
+```
+
 ## 调用示例
 
 ```ts

@@ -1,4 +1,5 @@
 import { env } from "@/lib/env";
+import { extractApiKey } from "@/lib/api-key";
 
 export type ChatMessage = {
   role: "system" | "user" | "assistant" | "tool";
@@ -12,30 +13,6 @@ export type ChatPayload = {
   max_tokens?: number;
   stream?: boolean;
 };
-
-export function extractApiKey(req: Request): string | null {
-  const auth = req.headers.get("authorization")?.trim();
-
-  const openrouterKey = req.headers.get("x-openrouter-api-key")?.trim();
-  const aiGatewayKey = req.headers.get("x-ai-gateway-api-key")?.trim();
-  const vercelGatewayKey = req.headers
-    .get("x-vercel-ai-gateway-api-key")
-    ?.trim();
-
-  const xApiKey = req.headers.get("x-api-key")?.trim();
-
-  if (openrouterKey) return openrouterKey;
-  if (aiGatewayKey) return aiGatewayKey;
-  if (vercelGatewayKey) return vercelGatewayKey;
-  if (xApiKey) return xApiKey;
-
-  if (auth?.toLowerCase().startsWith("bearer ")) {
-    const token = auth.slice(7).trim();
-    if (token) return token;
-  }
-
-  return null;
-}
 
 export type OpenRouterAuthorization =
   | { ok: true; apiKey: string }

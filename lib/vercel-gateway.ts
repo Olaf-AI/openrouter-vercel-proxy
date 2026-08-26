@@ -1,5 +1,6 @@
+import { createHash, randomUUID } from "node:crypto";
 import { env } from "@/lib/env";
-import { extractApiKey } from "@/lib/openrouter";
+import { extractApiKey } from "@/lib/api-key";
 
 const HOP_BY_HOP_HEADERS = new Set([
   "connection",
@@ -79,6 +80,10 @@ async function readRequestBody(req: Request): Promise<BodyInit | undefined> {
   return text ? text : undefined;
 }
 
+function keyFingerprint(apiKey: string): string {
+  return createHash("sha256").update(apiKey).digest("hex").slice(0, 12);
+}
+
 export async function callVercelGateway(req: Request, path: string) {
   const apiKey = extractApiKey(req);
 
@@ -90,11 +95,41 @@ export async function callVercelGateway(req: Request, path: string) {
 
   const url = buildGatewayUrl(path, req);
   const body = await readRequestBody(req);
+  const proxyRequestId = randomUUID();
+  const fingerprint = keyFingerprint(apiKey);
 
-  return fetch(url, {
+  console.info("Vercel Gateway upstream request", {
+    proxyRequestId,
     method: req.method,
-    headers: buildForwardHeaders(req, apiKey),
-    body,
-    cache: "no-store",
+    path,
+    upstreamHost: new URL(url).host,
+    keyFingerprint: fingerprint,
   });
+
+  try {
+    const response = await fetch(url, {
+      method: req.method,
+      headers: buildForwardHeaders(req, apiKey),
+      body,
+      cache: "no-store",
+    });
+
+    console.info("Vercel Gateway upstream response", {
+      proxyRequestId,
+      status: response.status,
+      keyFingerprint: fingerprint,
+      upstreamRequestId:
+        response.headers.get("x-request-id") ||
+        response.headers.get("x-vercel-id"),
+    });
+
+    return response;
+  } catch (error) {
+    console.error("Vercel Gateway upstream failure", {
+      proxyRequestId,
+      keyFingerprint: fingerprint,
+      error: error instanceof Error ? error.message : "unknown error",
+    });
+    throw error;
+  }
 }
