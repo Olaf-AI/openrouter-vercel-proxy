@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 
 import { createGateway } from "@ai-sdk/gateway";
 
-import { extractApiKey } from "@/lib/openrouter";
+import { extractApiKey } from "@/lib/api-key";
 
 function configuredGatewayKey() {
   return (

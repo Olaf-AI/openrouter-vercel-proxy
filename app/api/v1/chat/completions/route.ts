@@ -8,16 +8,16 @@ export const dynamic = "force-dynamic";
 
 const messageSchema = z.object({
   role: z.enum(["system", "user", "assistant", "tool"]),
-  content: z.string().min(1),
-});
+  content: z.union([
+    z.string(),
+    z.array(z.record(z.unknown())).min(1),
+  ]),
+}).passthrough();
 
 const bodySchema = z.object({
   model: z.string().optional(),
   messages: z.array(messageSchema).min(1),
-  temperature: z.number().min(0).max(2).optional(),
-  max_tokens: z.number().int().positive().optional(),
-  stream: z.boolean().optional().default(false),
-});
+}).passthrough();
 
 export async function OPTIONS(req: Request) {
   const origin = req.headers.get("origin");
@@ -61,11 +61,8 @@ export async function POST(req: Request) {
     const upstream = await callOpenRouter(
       "chat/completions",
       {
+        ...body,
         model: body.model || env.DEFAULT_MODEL,
-        messages: body.messages,
-        temperature: body.temperature,
-        max_tokens: body.max_tokens,
-        stream: body.stream ?? false,
       },
       authorization.apiKey,
     );

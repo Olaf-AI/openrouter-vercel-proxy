@@ -18,6 +18,14 @@ export type OpenRouterAuthorization =
   | { ok: true; apiKey: string }
   | { ok: false; status: 401 | 500; error: string };
 
+export function normalizeOpenRouterModel(model: string) {
+  if (model.includes("/")) return model;
+  if (/^(gpt-|o[134]-|text-embedding-)/.test(model)) {
+    return `openai/${model}`;
+  }
+  return model;
+}
+
 export function authorizeOpenRouterRequest(
   req: Request,
 ): OpenRouterAuthorization {
@@ -79,6 +87,17 @@ export async function callOpenRouter(
 
   const method = init?.method ?? "POST";
 
+  let upstreamBody = body;
+  if (body && typeof body === "object" && !Array.isArray(body)) {
+    const record = body as Record<string, unknown>;
+    upstreamBody = {
+      ...record,
+      ...(typeof record.model === "string"
+        ? { model: normalizeOpenRouterModel(record.model) }
+        : {}),
+    };
+  }
+
   const res = await fetch(url, {
     method,
     headers: {
@@ -87,7 +106,7 @@ export async function callOpenRouter(
       "HTTP-Referer": env.OPENROUTER_SITE_URL,
       "X-OpenRouter-Title": env.OPENROUTER_APP_NAME,
     },
-    body: body == null ? undefined : JSON.stringify(body),
+    body: upstreamBody == null ? undefined : JSON.stringify(upstreamBody),
     cache: "no-store",
   });
 

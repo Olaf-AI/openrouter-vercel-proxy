@@ -3,6 +3,7 @@
 一个可直接部署到 Vercel 的 Next.js + TypeScript 项目：
 
 - 前端或 Codex 调用 `/api/v1/chat/completions` / `/api/v1/responses`
+- 后端服务可调用 `/api/v1/embeddings` / `/api/v1/moderations`
 - 服务端转发到 OpenRouter
 - 支持服务端 OpenRouter Key，也兼容客户端自带 OpenRouter Key（BYOK）
 - 通过独立的 `/api/gemini/v1` Base URL 将 Codex Responses API 适配到 Gemini
@@ -25,6 +26,8 @@ npm run dev
 3. 配置环境变量：
    - `OPENROUTER_API_KEY`：服务端用于访问 OpenRouter 的真实密钥
    - `PROXY_API_KEY`：客户端访问本代理时使用的独立密钥；服务端密钥模式下必填
+   - `OPENAI_MODERATION_API_KEY`：仅用于转发 OpenAI Moderation API
+   - `OPENAI_MODERATION_BASE_URL`：可选，默认 `https://api.openai.com/v1`
    - `OPENROUTER_BASE_URL`
    - `OPENROUTER_APP_NAME`
    - `OPENROUTER_SITE_URL`
@@ -38,6 +41,11 @@ npm run dev
 任何人都能消耗额度的公开代理。这样 Codex 只需要持有
 `PROXY_API_KEY`，代理会在转发时替换为服务端的 `OPENROUTER_API_KEY`。如果两个变量
 都不配置，代理仍兼容原来的 BYOK 模式，此时客户端 Bearer token 会直接传给 OpenRouter。
+
+聊天接口会保留多模态消息和 `response_format` 等 OpenAI-compatible 参数并原样转发；
+历史的 `gpt-*`、`o1-*`、`o3-*`、`o4-*` 和 `text-embedding-*` 短模型名会自动补上
+`openai/` 前缀。Moderation 不经过 OpenRouter，而是使用独立的
+`OPENAI_MODERATION_API_KEY` 调用 OpenAI Moderation API。
 
 ## Codex
 

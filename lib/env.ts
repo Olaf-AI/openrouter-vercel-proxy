@@ -10,6 +10,13 @@ export const env = {
 
   PROXY_API_KEY: process.env.PROXY_API_KEY?.trim() || "",
 
+  OPENAI_MODERATION_API_KEY:
+    process.env.OPENAI_MODERATION_API_KEY?.trim() || "",
+
+  OPENAI_MODERATION_BASE_URL:
+    process.env.OPENAI_MODERATION_BASE_URL?.trim() ||
+    "https://api.openai.com/v1",
+
   OPENROUTER_BASE_URL:
     process.env.OPENROUTER_BASE_URL?.trim() || "https://openrouter.ai/api/v1",
 
