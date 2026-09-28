@@ -47,6 +47,26 @@ npm run dev
 `openai/` 前缀。Moderation 不经过 OpenRouter，而是使用独立的
 `OPENAI_MODERATION_API_KEY` 调用 OpenAI Moderation API。
 
+## Vercel 错误日志
+
+OpenRouter、Vercel AI Gateway 或 OpenAI Moderation 返回 4xx/5xx 时，代理会在
+Vercel Runtime Logs 写入一条 `External API error` 结构化日志。网络连接失败则记录
+`external_api_failure`。可以在 Vercel 项目的 **Logs** 页面搜索：
+
+```text
+external_api_error
+```
+
+每条日志包含 `provider`、`path`、`model`、`status`、`durationMs`、
+`proxyRequestId`、上游 `upstreamRequestId` 和脱敏后的 `responseError`。例如：
+
+```text
+External API error {"event":"external_api_error","provider":"openrouter","path":"chat/completions","status":403,"responseError":{"body":{"message":"Provider rejected request","code":403}}}
+```
+
+请求正文和对话内容不会进入日志；Authorization、API key、token、cookie、secret 和
+password 字段会被替换为 `[REDACTED]`，错误正文最多保留 8,000 个字符。
+
 ## Codex
 
 将 Codex 自定义 provider 的 base URL 指向：

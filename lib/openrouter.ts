@@ -1,5 +1,10 @@
 import { env } from "@/lib/env";
 import { extractApiKey } from "@/lib/api-key";
+import { randomUUID } from "node:crypto";
+import {
+  logExternalApiError,
+  logExternalApiFailure,
+} from "@/lib/external-api-log";
 
 export type ChatMessage = {
   role: "system" | "user" | "assistant" | "tool";
@@ -86,6 +91,8 @@ export async function callOpenRouter(
   const url = `${cleanBase}/${cleanPath}`;
 
   const method = init?.method ?? "POST";
+  const proxyRequestId = randomUUID();
+  const startedAt = performance.now();
 
   let upstreamBody = body;
   if (body && typeof body === "object" && !Array.isArray(body)) {
@@ -98,17 +105,38 @@ export async function callOpenRouter(
     };
   }
 
-  const res = await fetch(url, {
+  const record =
+    upstreamBody && typeof upstreamBody === "object" && !Array.isArray(upstreamBody)
+      ? (upstreamBody as Record<string, unknown>)
+      : undefined;
+  const context = () => ({
+    provider: "openrouter",
+    proxyRequestId,
     method,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-      "HTTP-Referer": env.OPENROUTER_SITE_URL,
-      "X-OpenRouter-Title": env.OPENROUTER_APP_NAME,
-    },
-    body: upstreamBody == null ? undefined : JSON.stringify(upstreamBody),
-    cache: "no-store",
+    path: cleanPath,
+    upstreamHost: new URL(url).host,
+    durationMs: Math.round(performance.now() - startedAt),
+    ...(typeof record?.model === "string" ? { model: record.model } : {}),
+    ...(typeof record?.stream === "boolean" ? { stream: record.stream } : {}),
   });
 
-  return res;
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+        "HTTP-Referer": env.OPENROUTER_SITE_URL,
+        "X-OpenRouter-Title": env.OPENROUTER_APP_NAME,
+      },
+      body: upstreamBody == null ? undefined : JSON.stringify(upstreamBody),
+      cache: "no-store",
+    });
+
+    await logExternalApiError(res, context());
+    return res;
+  } catch (error) {
+    logExternalApiFailure(error, context());
+    throw error;
+  }
 }

@@ -2,6 +2,11 @@ import { z } from "zod";
 import { authorizeOpenRouterRequest } from "@/lib/openrouter";
 import { corsHeaders, isDeniedOrigin } from "@/lib/security";
 import { env } from "@/lib/env";
+import { randomUUID } from "node:crypto";
+import {
+  logExternalApiError,
+  logExternalApiFailure,
+} from "@/lib/external-api-log";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,18 +54,36 @@ export async function POST(req: Request) {
 
     const body = bodySchema.parse(await req.json());
     const cleanBase = env.OPENAI_MODERATION_BASE_URL.replace(/\/+$/, "");
-    const upstream = await fetch(`${cleanBase}/moderations`, {
+    const url = `${cleanBase}/moderations`;
+    const model = body.model || "omni-moderation-latest";
+    const proxyRequestId = randomUUID();
+    const startedAt = performance.now();
+    const logContext = () => ({
+      provider: "openai",
+      proxyRequestId,
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${env.OPENAI_MODERATION_API_KEY}`,
-      },
-      body: JSON.stringify({
-        ...body,
-        model: body.model || "omni-moderation-latest",
-      }),
-      cache: "no-store",
+      path: "moderations",
+      upstreamHost: new URL(url).host,
+      durationMs: Math.round(performance.now() - startedAt),
+      model,
     });
+
+    let upstream: Response;
+    try {
+      upstream = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${env.OPENAI_MODERATION_API_KEY}`,
+        },
+        body: JSON.stringify({ ...body, model }),
+        cache: "no-store",
+      });
+      await logExternalApiError(upstream, logContext());
+    } catch (error) {
+      logExternalApiFailure(error, logContext());
+      throw error;
+    }
 
     return new Response(upstream.body, {
       status: upstream.status,

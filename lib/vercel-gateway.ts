@@ -1,6 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import { env } from "@/lib/env";
 import { extractApiKey } from "@/lib/api-key";
+import {
+  logExternalApiError,
+  logExternalApiFailure,
+} from "@/lib/external-api-log";
 
 const HOP_BY_HOP_HEADERS = new Set([
   "connection",
@@ -97,6 +101,7 @@ export async function callVercelGateway(req: Request, path: string) {
   const body = await readRequestBody(req);
   const proxyRequestId = randomUUID();
   const fingerprint = keyFingerprint(apiKey);
+  const startedAt = performance.now();
 
   console.info("Vercel Gateway upstream request", {
     proxyRequestId,
@@ -114,6 +119,17 @@ export async function callVercelGateway(req: Request, path: string) {
       cache: "no-store",
     });
 
+    const context = {
+      provider: "vercel-ai-gateway",
+      proxyRequestId,
+      method: req.method,
+      path,
+      upstreamHost: new URL(url).host,
+      durationMs: Math.round(performance.now() - startedAt),
+    };
+
+    await logExternalApiError(response, context);
+
     console.info("Vercel Gateway upstream response", {
       proxyRequestId,
       status: response.status,
@@ -125,10 +141,13 @@ export async function callVercelGateway(req: Request, path: string) {
 
     return response;
   } catch (error) {
-    console.error("Vercel Gateway upstream failure", {
+    logExternalApiFailure(error, {
+      provider: "vercel-ai-gateway",
       proxyRequestId,
-      keyFingerprint: fingerprint,
-      error: error instanceof Error ? error.message : "unknown error",
+      method: req.method,
+      path,
+      upstreamHost: new URL(url).host,
+      durationMs: Math.round(performance.now() - startedAt),
     });
     throw error;
   }
