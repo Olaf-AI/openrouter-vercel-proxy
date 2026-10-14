@@ -197,3 +197,20 @@ curl -N https://your-domain.vercel.app/api/v1/responses \
     "stream": true
   }'
 ```
+
+## Claude 指令顺序兼容入口
+
+Codex 调用 Claude 时，将 provider 的 Base URL 指向：
+
+```text
+https://your-domain.example/api/claude/v1
+```
+
+`POST /api/claude/v1/responses` 转发到现有 `VERCEL_GATEWAY_BASE_URL` 下的
+`/responses`，客户端继续使用 Vercel AI Gateway API key 和原模型名（包括虚拟模型别名）。
+该入口将 `input` 中的 `system/developer` 消息移到开头，保留指令内部、其余消息和工具项的
+原有顺序及完整内容，避免 Codex 压缩后出现 `user → developer → user`。同样支持
+`chat/completions` 的 `messages` 数组。响应沿用现有流式转发，不新增日志或状态存储。
+
+仅为 Claude 使用这个入口；中途指令提前可能改变其作用范围。已有 OpenRouter、Gemini
+和通用 Vercel Gateway 入口保持原行为。
